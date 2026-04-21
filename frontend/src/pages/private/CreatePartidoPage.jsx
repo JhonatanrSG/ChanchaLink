@@ -92,6 +92,9 @@ export default function CreatePartidoPage() {
   const [reserva, setReserva] = useState(null);
   const [loadingReserva, setLoadingReserva] = useState(true);
 
+  const [equipos, setEquipos] = useState([]);
+  const [loadingEquipos, setLoadingEquipos] = useState(false);
+
   const [form, setForm] = useState({
     reserva: reservaId || "",
     equipo: "",
@@ -137,6 +140,23 @@ export default function CreatePartidoPage() {
     }
   }, [reservaId]);
 
+  useEffect(() => {
+    const fetchEquipos = async () => {
+      setLoadingEquipos(true);
+      try {
+        const response = await api.get("/equipos/");
+        setEquipos(response.data || []);
+      } catch (err) {
+        console.error("ERROR CARGANDO EQUIPOS:", err?.response?.data || err);
+        setEquipos([]);
+      } finally {
+        setLoadingEquipos(false);
+      }
+    };
+
+    fetchEquipos();
+  }, []);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -150,10 +170,18 @@ export default function CreatePartidoPage() {
       ? value.replace(/\D/g, "")
       : value;
 
-    setForm((prev) => ({
-      ...prev,
-      [name]: sanitizedValue,
-    }));
+    setForm((prev) => {
+      const updated = {
+        ...prev,
+        [name]: sanitizedValue,
+      };
+
+      if (name === "tipo_partido" && sanitizedValue === "publico") {
+        updated.equipo = "";
+      }
+
+      return updated;
+    });
   };
 
   const handlePosicionChange = (e) => {
@@ -209,6 +237,11 @@ export default function CreatePartidoPage() {
       return;
     }
 
+    if (form.tipo_partido === "privado" && !form.equipo) {
+      setError("Debes seleccionar un equipo para publicar un partido privado.");
+      return;
+    }
+
     setError("");
     setSuccess("");
     setLoading(true);
@@ -217,7 +250,7 @@ export default function CreatePartidoPage() {
       const payload = {
         ...form,
         reserva: Number(form.reserva),
-        equipo: form.equipo ? Number(form.equipo) : null,
+        equipo: form.tipo_partido === "privado" && form.equipo ? Number(form.equipo) : null,
         jugadores_faltantes: Number(form.jugadores_faltantes),
         jugadores_actuales: Number(form.jugadores_actuales),
         maximo_jugadores: Number(form.maximo_jugadores),
@@ -394,6 +427,32 @@ export default function CreatePartidoPage() {
                       </div>
                     </div>
 
+                    {form.tipo_partido === "privado" && (
+                      <div style={styles.doubleRow}>
+                        <div style={styles.fieldGroup}>
+                          <label style={styles.label}>Equipo asociado</label>
+                          <select
+                            name="equipo"
+                            value={form.equipo}
+                            onChange={handleChange}
+                            style={styles.select}
+                            disabled={loadingEquipos}
+                          >
+                            <option value="">
+                              {loadingEquipos ? "Cargando equipos..." : "Selecciona un equipo"}
+                            </option>
+                            {equipos.map((equipo) => (
+                              <option key={equipo.id} value={equipo.id}>
+                                {equipo.nombre_equipo}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div />
+                      </div>
+                    )}
+
                     <div style={styles.doubleRow}>
                       <div style={styles.fieldGroup}>
                         <label style={styles.label}>Jugadores actuales</label>
@@ -533,6 +592,12 @@ export default function CreatePartidoPage() {
                     <p style={styles.summaryText}>
                       <strong>Partido:</strong> {formatTipoPartido(form.tipo_partido)}
                     </p>
+                    {form.tipo_partido === "privado" && form.equipo && (
+                      <p style={styles.summaryText}>
+                        <strong>Equipo:</strong>{" "}
+                        {equipos.find((eq) => String(eq.id) === String(form.equipo))?.nombre_equipo || "--"}
+                      </p>
+                    )}
                     <p style={styles.summaryText}>
                       <strong>Nivel:</strong> {formatNivel(form.nivel_partido)}
                     </p>

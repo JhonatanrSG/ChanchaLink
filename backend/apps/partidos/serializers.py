@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from apps.equipos.models import MiembroEquipo
 
 from .models import Partido, PartidoPosicionNecesaria, PostulacionPartido
 
@@ -130,12 +131,36 @@ class PartidoCreateUpdateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         reserva = attrs.get("reserva", getattr(self.instance, "reserva", None))
         usuario = self.context["request"].user
+        tipo_partido = attrs.get("tipo_partido", getattr(self.instance, "tipo_partido", None))
+        equipo = attrs.get("equipo", getattr(self.instance, "equipo", None))
+        fecha_vencimiento = attrs.get("fecha_vencimiento", getattr(self.instance, "fecha_vencimiento", None))
 
         if reserva.usuario != usuario:
             raise serializers.ValidationError("Solo puedes publicar partidos sobre reservas propias.")
 
         if reserva.estado_reserva != reserva.EstadoReserva.CONFIRMADA:
             raise serializers.ValidationError("Solo se pueden publicar partidos con reservas confirmadas.")
+
+        if tipo_partido == Partido.TipoPartido.PRIVADO:
+            if not equipo:
+                raise serializers.ValidationError("Los partidos privados deben tener un equipo asociado.")
+
+            pertenece_al_equipo = MiembroEquipo.objects.filter(
+                equipo=equipo,
+                usuario=usuario,
+                activo=True
+            ).exists()
+
+            if not pertenece_al_equipo:
+                raise serializers.ValidationError(
+                    "Solo puedes crear partidos privados con un equipo al que pertenezcas."
+                )
+
+        if fecha_vencimiento and reserva.fecha_reserva:
+            if fecha_vencimiento.date() > reserva.fecha_reserva:
+                raise serializers.ValidationError(
+                    "La fecha de vencimiento no puede ser posterior a la fecha del partido."
+                )
 
         return attrs
 

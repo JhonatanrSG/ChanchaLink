@@ -3,7 +3,8 @@ from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from django.db.models import Count, Q
+from apps.reservas.models import Reserva
 from .models import Cancha
 from .serializers import (
     CanchaPublicSerializer,
@@ -18,11 +19,25 @@ class CanchaPublicListView(generics.ListAPIView):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        return Cancha.objects.filter(
-            activa=True,
-            estado_operativo=Cancha.EstadoOperativo.ACTIVA,
-        ).select_related("empresa")
-
+        return (
+            Cancha.objects.filter(
+                activa=True,
+                estado_operativo=Cancha.EstadoOperativo.ACTIVA,
+            )
+            .select_related("empresa")
+            .annotate(
+                total_reservas=Count(
+                    "reservas",
+                    filter=Q(
+                        reservas__estado_reserva__in=[
+                            Reserva.EstadoReserva.CONFIRMADA,
+                            Reserva.EstadoReserva.FINALIZADA,
+                        ]
+                    ),
+                )
+            )
+            .order_by("-total_reservas", "nombre")
+        )
 
 class CanchaPublicDetailView(generics.RetrieveAPIView):
     serializer_class = CanchaPublicSerializer
